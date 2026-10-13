@@ -1,8 +1,11 @@
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
+import { HeadContent, Scripts, createRootRoute, Link } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
+import { ThemeSwitch } from '../components/theme-switch'
 
 import appCss from '../styles.css?url'
+
+const MODE_SNIPPET = `try{var m=localStorage.getItem('arthasnap-mode')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.dataset.mode=m;if(m==='dark')document.documentElement.classList.add('dark')}catch(e){}`
 
 export const Route = createRootRoute({
   head: () => ({
@@ -33,8 +36,15 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     <html lang="en">
       <head>
         <HeadContent />
+        <script dangerouslySetInnerHTML={{ __html: MODE_SNIPPET }} />
       </head>
       <body>
+        <header className="page-wrap flex items-center justify-between py-4">
+          <Link to="/" search={{ symbols: 'RELIANCE.NS' }} className="display-title text-lg font-bold no-underline">
+            ArthaSnap
+          </Link>
+          <ThemeSwitch />
+        </header>
         {children}
         <TanStackDevtools
           config={{
