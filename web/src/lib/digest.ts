@@ -2,7 +2,7 @@
 // the edge 1042s those). Client code imports only the fn handles below.
 import { createServerFn } from '@tanstack/react-start'
 import {
-  snapshot, chart, headlines, digest, movers,
+  snapshot, chart, digest, movers,
   parseSymbols as parse,
 } from '../../../digest/src/svc'
 
@@ -11,7 +11,7 @@ export { parseSymbols } from '../../../digest/src/svc'
 export interface Quote {
   symbol: string
   snapshot: { price: number; chgPct: number | null; pe: number | null; vol: number; yHigh: number | null; yLow: number | null; sector: string | null }
-  spark: number[]
+  spark: Array<{ t: number; c: number }>
 }
 
 // Fast path (SSR in loader): quotes + sparklines, no AI calls.
@@ -24,7 +24,7 @@ export const getQuotes = createServerFn({ method: 'GET' })
           snapshot(sym),
           chart(sym).catch(() => ({ candles: [] as Array<{ c: number }> })),
         ])
-        return { symbol: sym, snapshot: snap, spark: history.candles.map((c) => c.c).slice(-20) }
+        return { symbol: sym, snapshot: snap, spark: history.candles.map((c: any) => ({ t: c.t, c: c.c })).slice(-20) }
       }),
     ),
   )

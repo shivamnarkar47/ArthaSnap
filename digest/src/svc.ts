@@ -5,13 +5,14 @@ const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "qwen/qwen3.8-27b"; // ponytail: gpt-oss-20b returns empty content ~1/3 calls; qwen 3/3 in testing
 
 // ponytail: parses ../.env (repo root) for missing keys only, so app runs from any cwd. dotenv dep when this outgrows KEY=VAL lines.
+declare const Bun: any;
 let envLoaded = false;
 export function loadEnv() {
   if (envLoaded || typeof Bun === "undefined") return; // workerd: vars/secrets come from process.env
   envLoaded = true;
   try {
     const raw = Bun.file(new URL("../../.env", import.meta.url));
-    raw.text().then((t) => {
+    raw.text().then((t: string) => {
       for (const line of t.split("\n")) {
         const m = line.match(/^([A-Z_]+)=(.*)$/);
         if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
@@ -107,7 +108,7 @@ async function yahooDetail(ticker: string) {
   if (!r.ok) return null;
   const res = (await r.json())?.quoteSummary?.result?.[0];
   if (!res || raw(res.price?.regularMarketPrice) == null) return null;
-  const { price = {}, summaryDetail = {}, defaultKeyStatistics = {}, assetProfile = {} } = res;
+  const { price = {}, summaryDetail = {}, assetProfile = {} } = res;
   return {
     price: raw(price.regularMarketPrice),
     chgPct: raw(price.regularMarketChangePercent) != null ? +(raw(price.regularMarketChangePercent) * 100).toFixed(2) : null,
@@ -227,7 +228,7 @@ export async function movers() {
 export async function digest(syms: string[], range = "1mo", interval = "1d") {
   const per = await Promise.all(syms.map(async (sym) => {
     const [snap, ch, news] = await Promise.all([snapshot(sym), chart(sym, range, interval), headlines(sym, syms.length > 1 ? 3 : 5)]);
-    const closes = ch.candles.map((c) => c.c);
+    const closes = ch.candles.map((c: { c: number }) => c.c);
     const feats = { sma20: sma(closes, 20), rsi14: rsi(closes), spark: closes.slice(-20) };
     return { sym, snap, feats, news, candles: syms.length > 1 ? [] : ch.candles };
   }));
