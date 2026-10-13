@@ -223,7 +223,7 @@ function Home() {
                     <span className="truncate">{short(q.symbol)}</span>
                     <span className="text-2xl font-bold tabular-nums">{q.snapshot.price != null ? inr(q.snapshot.price) : '—'}</span>
                   </CardTitle>
-                  <div className="flex items-center justify-between pt-1 text-sm text-muted-foreground">
+                  <div className="flex flex-col gap-0.5 pt-1 text-sm text-muted-foreground">
                     <span className="truncate">{q.snapshot.sector ?? '—'} · PE {q.snapshot.pe != null ? Number(q.snapshot.pe).toFixed(1) : '—'}</span>
                     <span className={`font-semibold tabular-nums ${q.snapshot.chgPct != null && q.snapshot.chgPct >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                       {q.snapshot.chgPct != null ? `${q.snapshot.chgPct > 0 ? '+' : ''}${Number(q.snapshot.chgPct).toFixed(2)}%` : '—'}
