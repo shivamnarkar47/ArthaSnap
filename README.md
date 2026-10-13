@@ -9,7 +9,7 @@ Live: https://subq-web.shivamnarkar47.workers.dev
 
 | Dir | What | Run | Deployed |
 |---|---|---|---|
-| `indian-api/` | NSE/BSE snapshot REST (Cloudflare Worker, Yahoo-backed) | `npx wrangler dev --port 8787` | `stock-api…workers.dev` |
+| `indian-api/` | NSE/BSE snapshot REST (Cloudflare Worker, Yahoo-backed, via [0xramm/Indian-Stock-Market-API](https://github.com/0xramm/Indian-Stock-Market-API)) | `npx wrangler dev --port 8787` | `stock-api…workers.dev` |
 | `digest/` | Bun + Hono JSON API: `/stock /history /decide /news /digest /movers` | `bun src/index.ts` (:3000) | `subq-digest…workers.dev` |
 | `web/` | TanStack Start + shadcn + ns-ui, SSR + streaming, nitro → Workers | `bun run dev` (:3001) | `subq-web…workers.dev` |
 | `snap_nse.py` | Original one-file SubQ probe (stdlib only) | `python snap_nse.py` | — |
@@ -61,6 +61,11 @@ cd web && NITRO_PRESET=cloudflare_module bun run build
 - Groq `qwen/qwen3.8-27b` for briefs (`gpt-oss-20b` returns empty ~1/3 — measured).
 - UI motion: [ns-ui](https://design.helpmarq.com) components, installed as owned
   source under `web/src/components/ui/`.
+
+## Credits
+
+- Stock snapshot API: [0xramm/Indian-Stock-Market-API](https://github.com/0xramm/Indian-Stock-Market-API) (MIT) — vendored under `indian-api/`, deployed as-is.
+- Motion components: [ns-ui](https://design.helpmarq.com) by Nikolas Sapa (MIT).
 
 ## Disclaimer
 
