@@ -40,7 +40,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <header className="page-wrap flex items-center justify-between py-4">
-          <Link to="/" search={{ symbols: 'RELIANCE.NS' }} className="display-title text-lg font-bold no-underline">
+          <Link to="/" search={{ symbols: '' }} className="display-title text-lg font-bold no-underline">
             ArthaSnap
           </Link>
           <ThemeSwitch />

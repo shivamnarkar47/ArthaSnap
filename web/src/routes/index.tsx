@@ -3,18 +3,17 @@ import Markdown from 'react-markdown'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { getQuotes, getDigest, getMovers, parseSymbols, type DigestResult } from '#/lib/digest'
 import { Button } from '#/components/ui/button'
-import { Input } from '#/components/ui/input'
+import { StockSearch } from '#/components/stock-search'
 import { Card, CardHeader, CardTitle, CardContent } from '#/components/ui/card'
 import { LineChart } from '#/components/ui/line-chart'
-import { BarChart } from '#/components/ui/bar-chart'
-
-const DEFAULTS = 'RELIANCE.NS'
 
 function validSearch(search: Record<string, unknown>): { symbols: string } {
+  const raw = String(search.symbols ?? '').trim()
+  if (!raw) return { symbols: '' }
   try {
-    return { symbols: parseSymbols(String(search.symbols ?? DEFAULTS)).join(',') }
+    return { symbols: parseSymbols(raw).join(',') }
   } catch {
-    return { symbols: DEFAULTS }
+    return { symbols: '' }
   }
 }
 
@@ -22,7 +21,7 @@ export const Route = createFileRoute('/')({
   validateSearch: validSearch,
   loaderDeps: ({ search }) => ({ symbols: search.symbols }),
   loader: async ({ deps }) => ({
-    quotes: await getQuotes({ data: deps.symbols }),
+    quotes: deps.symbols ? await getQuotes({ data: deps.symbols }) : [],
     movers: await getMovers(),
   }),
   component: Home,
@@ -50,8 +49,7 @@ function Verdict({ action }: { action: string | null }) {
   return <span className={`rounded-full px-3 py-1 text-sm font-semibold ring-1 ${tone}`}>{action ?? '—'}</span>
 }
 
-function Skeleton({ label }: { label: string }) {
-  return (
+function Skeleton({ label }: { label: string }) {  return (
     <div className="animate-pulse space-y-2" role="status" aria-label={label}>
       <div className="h-3 w-2/3 rounded bg-muted" />
       <div className="h-3 w-1/2 rounded bg-muted" />
@@ -82,34 +80,99 @@ function Md({ text }: { text: string }) {
   )
 }
 
+function BoardTable({
+  rows,
+  onPick,
+}: {
+  rows: Array<{ symbol: string; price: number; chgPct: number }>
+  onPick: (s: string) => void
+}) {
+  const [key, setKey] = React.useState<'chgPct' | 'price' | 'symbol'>('chgPct')
+  const [dir, setDir] = React.useState<1 | -1>(-1)
+  const max = Math.max(...rows.map((r) => Math.abs(r.chgPct)), 0.01)
+  const sorted = [...rows].sort((a, b) =>
+    key === 'symbol' ? dir * a.symbol.localeCompare(b.symbol) : dir * (a[key] - b[key]),
+  )
+  const Head = ({ k, label, right }: { k: typeof key; label: string; right?: boolean }) => (
+    <button
+      onClick={() => (key === k ? setDir((d) => (d === 1 ? -1 : 1)) : (setKey(k), setDir(k === 'symbol' ? 1 : -1)))}
+      className={`font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground hover:text-foreground ${right ? 'text-right' : 'text-left'}`}
+    >
+      {label} {key === k ? (dir === 1 ? '▲' : '▼') : ''}
+    </button>
+  )
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse font-mono text-[13px] tabular-nums">
+        <thead>
+          <tr className="border-b border-border text-left">
+            <th className="py-2 pr-3 font-medium"><Head k="symbol" label="Symbol" /></th>
+            <th className="py-2 pr-3 text-right font-medium"><Head k="price" label="Last" right /></th>
+            <th className="py-2 pr-3 text-right font-medium"><Head k="chgPct" label="Chg%" right /></th>
+            <th className="hidden py-2 font-medium sm:table-cell"><span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Momentum</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((r) => {
+            const up = r.chgPct >= 0
+            return (
+              <tr key={r.symbol} onClick={() => onPick(r.symbol)} className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-accent">
+                <td className="py-2 pr-3 font-semibold">{short(r.symbol)}</td>
+                <td className="py-2 pr-3 text-right">{r.price?.toLocaleString('en-IN', { maximumFractionDigits: 1 })}</td>
+                <td className={`py-2 pr-3 text-right font-semibold ${up ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {up ? '▲' : '▼'} {up ? '+' : ''}{r.chgPct.toFixed(2)}
+                </td>
+                <td className="hidden py-2 sm:table-cell">
+                  <span className="block h-1.5 w-28 overflow-hidden rounded-full bg-muted">
+                    <span
+                      className={`block h-full rounded-full ${up ? 'bg-green-600 dark:bg-green-500' : 'bg-red-600 dark:bg-red-500'}`}
+                      style={{ width: `${Math.max(4, (Math.abs(r.chgPct) / max) * 100)}%`, marginLeft: up ? 0 : 'auto' }}
+                    />
+                  </span>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function Home() {
   const { symbols } = Route.useSearch()
   const { quotes, movers } = Route.useLoaderData()
   const navigate = useNavigate()
-  const [input, setInput] = React.useState(symbols)
   const [digest, setDigest] = React.useState<DigestResult | null>(null)
   const [aiError, setAiError] = React.useState<string | null>(null)
 
-  const go = (s: string) => {
+  const go = (syms: string[]) => {
+    try {
+      navigate({ to: '/', search: { symbols: parseSymbols(syms.join(',')).join(',') } })
+    } catch {
+      /* invalid, stay */
+    }
+  }
+  const goRaw = (s: string) => {
     try {
       navigate({ to: '/', search: { symbols: parseSymbols(s).join(',') } })
     } catch {
-      setInput(symbols)
+      /* invalid, stay */
     }
   }
 
   React.useEffect(() => {
     setDigest(null)
     setAiError(null)
+    if (!symbols) return
     getDigest({ data: symbols.split(',') }).then(setDigest, (e) => setAiError(e.message || 'AI digest failed'))
   }, [symbols])
 
+  const hasSyms = symbols.length > 0
+
   const verdict = (sym: string) => digest?.results.find((r) => r.symbol === sym)
   const top = movers.gainers[0]
-  const board = [...movers.gainers, ...movers.losers].map((m) => ({
-    label: short(m.symbol),
-    change: +m.chgPct.toFixed(2),
-  }))
+  const board = [...movers.gainers, ...movers.losers]
 
   return (
     <div className="page-wrap rise-in pb-20">
@@ -122,20 +185,12 @@ function Home() {
         <p className="mt-2 max-w-md text-[15px] text-muted-foreground">
           Five symbols at most. One judgment each — buy, watch or avoid — with the news in plain words.
         </p>
-        <form
-          id="digest"
-          className="mt-6 flex max-w-lg scroll-mt-6 gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            go(input)
-          }}
-        >
-          <Input value={input} onChange={(e) => setInput(e.target.value.toUpperCase())} placeholder="RELIANCE.NS, TCS.NS…" aria-label="Symbols" className="bg-card" />
-          <Button type="submit">Ask</Button>
-        </form>
+        <div id="digest" className="mt-6 max-w-lg scroll-mt-6">
+          <StockSearch initial={hasSyms ? symbols.split(',') : []} onGo={go} />
+        </div>
         <div className="mt-3 flex flex-wrap gap-2 text-[13px]">
           {['RELIANCE.NS,TCS.NS,INFY.NS', 'HDFCBANK.NS,ICICIBANK.NS', 'TATAMOTORS.NS'].map((ex) => (
-            <button key={ex} onClick={() => go(ex)} className="rounded-full border border-border bg-card px-3 py-1 text-muted-foreground hover:text-foreground">
+            <button key={ex} onClick={() => goRaw(ex)} className="rounded-full border border-border bg-card px-3 py-1 text-muted-foreground hover:text-foreground">
               {ex}
             </button>
           ))}
@@ -154,7 +209,8 @@ function Home() {
         </div>
       </section>
 
-      {/* 02 — digest */}
+      {/* 02 — digest, only when symbols picked */}
+      {hasSyms && (
       <section className="mt-10">
         <Kicker n="02">DIGEST · {symbols}</Kicker>
         <div className="mt-3 grid gap-4 md:grid-cols-2">
@@ -208,8 +264,10 @@ function Home() {
           })}
         </div>
       </section>
+      )}
 
       {/* 03 — brief */}
+      {hasSyms && (
       <section className="mt-6">
         <Kicker n="03">AI BRIEF</Kicker>
         <Card className="mt-3">
@@ -218,28 +276,17 @@ function Home() {
           </CardContent>
         </Card>
       </section>
+      )}
 
       {/* 04 — day board */}
       <section className="mt-10">
-        <Kicker n="04">DAY BOARD · NSE</Kicker>
+        <Kicker n={hasSyms ? '04' : '02'}>DAY BOARD · NSE</Kicker>
         <Card className="mt-3">
           <CardContent className="pt-6">
-            <BarChart
-              variant="horizontal"
-              appearance="ledger"
-              data={board}
-              series={[{ key: 'change', label: 'Day change %', color: 'olive' }]}
-              summary={{
-                label: top ? `Top gainer ${short(top.symbol)}` : 'Top gainer',
-                value: top ? `+${top.chgPct.toFixed(2)}%` : '—',
-                detail: `${board.length} symbols, one batch quote.`,
-              }}
-              caption="Day movers · gains vs losses"
-              description="Horizontal bars with exact values beside the plot."
-            />
+            <BoardTable rows={board} onPick={goRaw} />
             <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
               {[...movers.gainers.slice(0, 3), ...movers.losers.slice(0, 2)].map((m) => (
-                <Button key={m.symbol} variant="outline" size="sm" onClick={() => go(m.symbol)}>
+                <Button key={m.symbol} variant="outline" size="sm" onClick={() => goRaw(m.symbol)}>
                   Digest {short(m.symbol)}
                 </Button>
               ))}

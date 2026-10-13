@@ -92,7 +92,7 @@ export function rsi(closes: number[], n = 14): number | null {
 // ---- Yahoo quotes direct (same fetch everywhere: local AND workerd. No worker-to-worker hop; edge 1042s it) ----
 const raw = (f: any) => (f && typeof f === "object" ? (f.raw ?? null) : (f ?? null));
 let crumbCache = { crumb: null as string | null, cookie: "", exp: 0 };
-async function yahooAuthed(build: (crumb: string) => string, timeoutMs = 15000): Promise<Response> {
+async function yahooAuthed(build: (crumb: string) => string, timeoutMs = 15000, retry = true): Promise<Response> {
   if (!crumbCache.crumb || Date.now() > crumbCache.exp) {
     const c0 = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(timeoutMs) });
     const cookie = (c0.headers.get("set-cookie") || "").split(";")[0];
@@ -100,7 +100,7 @@ async function yahooAuthed(build: (crumb: string) => string, timeoutMs = 15000):
     crumbCache = { crumb: (await c1.text()).trim(), cookie, exp: Date.now() + 50 * 60 * 1000 };
   }
   const r = await fetch(build(crumbCache.crumb!), { headers: { "User-Agent": UA, Cookie: crumbCache.cookie }, signal: AbortSignal.timeout(timeoutMs) });
-  if (r.status === 401) { crumbCache.exp = 0; return yahooAuthed(build, timeoutMs); }
+  if (r.status === 401 && retry) { crumbCache.exp = 0; return yahooAuthed(build, timeoutMs, false); } // ponytail: single retry max — persistent 401s recursed into the 50-subrequest cap
   return r;
 }
 async function yahooDetail(ticker: string) {
@@ -126,6 +126,47 @@ async function yahooBatch(tickers: string[]) {
 }
 // ponytail: hardcoded Nifty-heavy universe; live list when needed
 const UNIVERSE = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "KOTAKBANK.NS", "LT.NS", "HINDUNILVR.NS", "AXISBANK.NS", "ASIANPAINT.NS", "MARUTI.NS", "SUNPHARMA.NS", "TATAMOTORS.NS", "TITAN.NS", "ULTRACEMCO.NS", "BAJFINANCE.NS", "NTPC.NS", "POWERGRID.NS", "ONGC.NS", "TATASTEEL.NS", "ADANIENT.NS", "ADANIPORTS.NS", "COALINDIA.NS", "HCLTECH.NS", "WIPRO.NS", "JSWSTEEL.NS", "HINDALCO.NS", "CIPLA.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "TECHM.NS", "BPCL.NS", "BRITANNIA.NS", "NESTLEIND.NS"];
+// @ts-ignore - bundled JSON universe, native in Bun + workerd + Vite
+import UNIV from "./universe.json";
+export interface SuggestRow { symbol: string; company: string; nse: string; bse: string }
+// ponytail: subsequence fuzzy, no dep; live Yahoo search merges on top when query misses
+export function suggestLocal(query: string, n = 8): SuggestRow[] {
+  const q = query.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (q.length < 1) return (UNIV as SuggestRow[]).slice(0, n);
+  const scored: Array<{ r: SuggestRow; s: number }> = [];
+  for (const r of UNIV as SuggestRow[]) {
+    const hay = (r.symbol + " " + r.company).toLowerCase().replace(/[^a-z0-9]/g, "");
+    let s = -1;
+    const idx = hay.indexOf(q);
+    if (idx >= 0) s = idx;
+    else {
+      let j = 0;
+      for (let i = 0; i < hay.length && j < q.length; i++) if (hay[i] === q[j]) j++;
+      if (j === q.length) s = 50; // subsequence fallback, ranked below substring hits
+    }
+    if (s >= 0) scored.push({ r, s });
+  }
+  return scored.sort((a, b) => a.s - b.s).slice(0, n).map((x) => x.r);
+}
+export async function suggest(query: string): Promise<SuggestRow[]> {
+  const local = suggestLocal(query);
+  const q = query.trim();
+  if (q.length < 2) return local;
+  try {
+    const r = await get(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10`, 8000);
+    const live: SuggestRow[] = ((await r.json())?.quotes || [])
+      .filter((x: any) => x.symbol && (x.symbol.endsWith(".NS") || x.symbol.endsWith(".BO")))
+      .map((x: any) => {
+        const sym = x.symbol.replace(/\.(NS|BO)$/, "");
+        return { symbol: sym, company: x.longname || x.shortname || sym, nse: `${sym}.NS`, bse: `${sym}.BO` };
+      })
+      .filter((x: SuggestRow) => !local.some((l) => l.symbol === x.symbol))
+      .slice(0, 4);
+    return [...local, ...live].slice(0, 8);
+  } catch {
+    return local;
+  }
+}
 
 // ---- snapshot ----
 export async function snapshot(sym: string) {

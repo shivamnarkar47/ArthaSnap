@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { loadEnv, HttpErr, cleanSym, parseSymbols, snapshot, chart, headlines, decide, summarize, digest, movers, RANGES, INTERVALS } from "./svc";
+import { loadEnv, HttpErr, cleanSym, parseSymbols, snapshot, chart, headlines, decide, summarize, digest, movers, suggest, RANGES, INTERVALS } from "./svc";
 
 loadEnv();
 const app = new Hono();
@@ -41,6 +41,10 @@ app.get("/digest", async (c) => {
 });
 app.get("/movers", async (c) => {
   try { return c.json({ status: "success", ...(await movers()) }); }
+  catch (e) { return err(e); }
+});
+app.get("/suggest", async (c) => {
+  try { return c.json({ status: "success", results: await suggest(c.req.query("q") || "") }); }
   catch (e) { return err(e); }
 });
 app.notFound((c) => c.json({ status: "error", message: "not found" }, 404));

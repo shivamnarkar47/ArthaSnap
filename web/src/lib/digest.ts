@@ -2,11 +2,11 @@
 // the edge 1042s those). Client code imports only the fn handles below.
 import { createServerFn } from '@tanstack/react-start'
 import {
-  snapshot, chart, digest, movers,
-  parseSymbols as parse,
+  snapshot, chart, digest, movers, suggest,
+  parseSymbols as parse, type SuggestRow,
 } from '../../../digest/src/svc'
 
-export { parseSymbols } from '../../../digest/src/svc'
+export { parseSymbols, type SuggestRow } from '../../../digest/src/svc'
 
 export interface Quote {
   symbol: string
@@ -48,3 +48,8 @@ export interface Movers {
 export const getMovers = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Movers> => movers(),
 )
+
+// Fuzzy finder: bundled JSON first, Yahoo live merged. In-process, no fetch hop.
+export const suggestStocks = createServerFn({ method: 'GET' })
+  .validator((d: unknown) => String(d ?? '').slice(0, 30))
+  .handler(async ({ data }): Promise<SuggestRow[]> => suggest(data))
