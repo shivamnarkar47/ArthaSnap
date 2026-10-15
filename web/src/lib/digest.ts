@@ -56,6 +56,38 @@ export const getChart = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }) => chart(data.symbol, data.range))
 
+// Full single-stock analysis for the detail route: snapshot + technicals +
+// SubQ decision + news + 3mo candles + AI summary.
+export interface StockDetail {
+  symbol: string
+  snapshot: Quote['snapshot']
+  feats: { sma20: number | null; rsi14: number | null; spark: number[] }
+  decision: { buy: number | null; action: string | null; conviction: number | null }
+  news: Array<{ title: string; link: string }>
+  candles: Array<{ t: number; o: number; h: number; l: number; c: number; v: number }>
+  summary: string
+}
+
+export const getStockDetail = createServerFn({ method: 'POST' })
+  .validator((d: unknown) => {
+    const syms = parse(String(d ?? ''))
+    if (syms.length !== 1) throw new Error('one symbol required, e.g. RELIANCE.NS')
+    return syms[0] as string
+  })
+  .handler(async ({ data }): Promise<StockDetail> => {
+    const out = await digest([data], '3mo', '1d')
+    const r = out.results[0]
+    return {
+      symbol: r.symbol,
+      snapshot: r.snapshot,
+      feats: r.feats,
+      decision: r.decision,
+      news: r.news,
+      candles: r.candles,
+      summary: out.summary,
+    }
+  })
+
 // Fast path (SSR): day's top-10 gainers/losers.
 export const getMovers = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Movers> => movers(),

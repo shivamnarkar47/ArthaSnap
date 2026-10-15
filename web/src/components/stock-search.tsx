@@ -57,13 +57,18 @@ export function StockSearch({ initial, onGo }: { initial: string[]; onGo: (syms:
 
   const submit = () => {
     let syms = [...picks]
-    const t = text.trim()
-    if (t) {
-      try {
-        for (const s of parseSymbols(t)) if (!syms.includes(s)) syms.push(s)
-      } catch {
-        // typed text isn't raw tickers — take the highlighted suggestion instead
-        if (open && results[hi] && !syms.includes(results[hi].nse)) syms.push(results[hi].nse)
+    if (open && results.length) {
+      // Enter picks the top suggestion directly — no extra tap needed
+      const pick = results[hi] ?? results[0]
+      if (pick && !syms.includes(pick.nse)) syms.push(pick.nse)
+    } else {
+      const t = text.trim()
+      if (t) {
+        try {
+          for (const s of parseSymbols(t)) if (!syms.includes(s)) syms.push(s)
+        } catch {
+          /* not raw tickers — fall through to current picks */
+        }
       }
     }
     syms = syms.slice(0, 5)

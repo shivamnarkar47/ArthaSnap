@@ -48,6 +48,7 @@ export function SymbolChart({
   const [range, setRange] = React.useState<ChartRange>("1M");
   const [ohlc, setOhlc] = React.useState<Record<string, Candle[]>>({});
   const [failed, setFailed] = React.useState<Record<string, boolean>>({});
+  const [fetching, setFetching] = React.useState(false);
 
   React.useEffect(() => {
     setOhlc({});
@@ -58,12 +59,17 @@ export function SymbolChart({
   React.useEffect(() => {
     if (!needFetch || ohlc[range] || failed[range]) return;
     let live = true;
+    setFetching(true);
     getChart({ data: { symbol, range: RANGE_Q[range] } }).then(
       (r) => {
-        if (live) setOhlc((m) => ({ ...m, [range]: downsample(r.candles) }));
+        if (!live) return;
+        setOhlc((m) => ({ ...m, [range]: downsample(r.candles) }));
+        setFetching(false);
       },
       () => {
-        if (live) setFailed((m) => ({ ...m, [range]: true }));
+        if (!live) return;
+        setFailed((m) => ({ ...m, [range]: true }));
+        setFetching(false);
       },
     );
     return () => {
@@ -74,6 +80,16 @@ export function SymbolChart({
   const label = range === "1D" ? timeLabel : dayLabel;
   const candles = ohlc[range];
   const showLoading = needFetch && !candles && !failed[range];
+
+  const summary = React.useMemo(() => {
+    if (candles?.length) {
+      const h = Math.max(...candles.map((c) => c.h));
+      const l = Math.min(...candles.map((c) => c.l));
+      return `H ${inrTick(h)} · L ${inrTick(l)}`;
+    }
+    const last = initial[initial.length - 1];
+    return last ? `Last ${inrTick(last.c)}` : null;
+  }, [candles, initial]);
 
   return (
     <div className="min-w-0 space-y-3">
@@ -113,11 +129,12 @@ export function SymbolChart({
           </Button>
         </div>
       </div>
+      <div className="flex min-w-0 items-center justify-between gap-2 text-xs text-muted-foreground" aria-live="polite">
+        <span className="truncate tabular-nums">{summary}</span>
+        {fetching && <span className="shrink-0">updating…</span>}
+      </div>
       {showLoading ? (
-        <div className="animate-pulse space-y-2" role="status" aria-label="Loading chart">
-          <div className="h-3 w-2/3 rounded bg-muted" />
-          <div className="h-24 rounded bg-muted" />
-        </div>
+        <div className="h-[300px] animate-pulse rounded-xl bg-muted" role="status" aria-label="Loading chart" />
       ) : failed[range] ? (
         <p className="text-sm text-muted-foreground">Chart unavailable for {range}.</p>
       ) : kind === "line" && range === "1M" ? (
