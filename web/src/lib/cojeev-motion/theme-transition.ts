@@ -1,6 +1,4 @@
 "use client";
-import { createMotionLane, resolveChoreography } from "#/lib/cojeev-motion/choreography.ts";
-import { getSettingsSnapshot, subscribeSettings } from "#/lib/cojeev-motion/settings.ts";
 
 export type ThemeRevealOrigin = { x:number; y:number };
 export type ThemeChangeDetails = { origin:ThemeRevealOrigin };
@@ -49,123 +47,42 @@ export function themeRevealPath(progress:number,origin:ThemeRevealOrigin,width:n
   return path+"Z";
 }
 
-type Reveal = {scope:HTMLElement;from:ThemeMode;to:ThemeMode;requested:ThemeMode;ready:boolean;done:boolean;lane:ReturnType<typeof createMotionLane>;view:ViewTransition|null;finish:()=>void;run:()=>void};
-let active:Reveal|undefined;
-
-/** Reveal the destination DOM. Quiet/unsupported clients commit without an overlay. */
+/**
+ * Smooth theme switch: every theme write happens inside the view-transition
+ * callback (so the old snapshot stays on the old theme), then a short circular
+ * reveal expands from the tap point. The reveal is a single WAAPI animation on
+ * the transition pseudo-element, so it runs on the compositor. Quiet,
+ * hidden, reduced-motion or unsupported clients commit instantly.
+ */
 export function applyTheme(mode:ThemeMode,quiet=false,root?:HTMLElement,options:ThemeRevealOptions={}) {
   if(typeof document==="undefined")return;
   const scope=root??document.documentElement,doc=scope.ownerDocument,canvas=doc.documentElement;
+  const commit=()=>{scope.dataset.mode=mode;scope.classList.toggle("dark",mode==="dark");};
+  if(scope.dataset.mode===mode){pendingOrigin=undefined;commit();return;}
   const reduced=()=>doc.defaultView?.matchMedia("(prefers-reduced-motion: reduce)").matches??false;
-  const isQuiet=()=>quiet||doc.hidden||resolveChoreography(getSettingsSnapshot(),reduced()).quiet;
-  if(active?.scope===scope&&!active.done){
-    const reveal=active,changed=reveal.requested!==mode;
-    reveal.requested=mode;pendingOrigin=undefined;
-    if(isQuiet())reveal.finish();
-    else if(changed&&reveal.ready)reveal.run();
-    return;
-  }
-  active?.finish();
-  if(scope.dataset.mode===mode){pendingOrigin=undefined;return;}
   const activation=pendingOrigin&&performance.now()-pendingOrigin.time<1500?pendingOrigin:undefined;
-  const choice=variedThemeOrigin(canvas.clientWidth,canvas.clientHeight,Math.random,previousZone);
-  const origin=options.origin??activation?.origin??choice.origin;
-  if(!options.origin&&!activation)previousZone=choice.zone;
-  const toggle=activation?.element.isConnected?activation.element:undefined;
+  const origin=options.origin??activation?.origin;
   pendingOrigin=undefined;
-  if(isQuiet()||typeof doc.startViewTransition!=="function"||!CSS.supports("clip-path",'path("M0 0L1 0L1 1Z")')){scope.dataset.mode=mode;return;}
-  const from:ThemeMode=scope.dataset.mode==="dark"?"dark":"light";
+  const start=(doc as Document & {startViewTransition?:(cb:()=>void)=>{ready:Promise<void>;finished:Promise<void>;skipTransition:()=>void}}).startViewTransition;
+  if(quiet||doc.hidden||reduced()||typeof start!=="function"||!origin){commit();return;}
   const width=canvas.clientWidth,height=canvas.clientHeight;
-  const phase=Math.random()*Math.PI*2,duration=1.2+Math.random()*.18;
-  const savedStyles=new Map(["--v-theme-clip","--v-theme-glyph","--v-theme-glyph-position","--v-theme-glyph-size","--v-theme-glyph-mask"].map(name=>[name,canvas.style.getPropertyValue(name)]));
-  const savedAttributes=new Map(["data-theme-reveal","data-theme-progress","data-theme-origin"].map(name=>[name,canvas.getAttribute(name)]));
-  // Include the activated control in the live root view throughout the reveal.
-  // A disjoint capsule keeps the glyph moving without relying on named live
-  // snapshots, whose new image can be blank in WebKit while the root paints.
-  const control=toggle?.getBoundingClientRect();
-  const controlPath=control?`M${control.left+control.height/2} ${control.top}H${control.right-control.height/2}Q${control.right} ${control.top} ${control.right} ${control.top+control.height/2}Q${control.right} ${control.bottom} ${control.right-control.height/2} ${control.bottom}H${control.left+control.height/2}Q${control.left} ${control.bottom} ${control.left} ${control.top+control.height/2}Q${control.left} ${control.top} ${control.left+control.height/2} ${control.top}Z`:"";
-  const glyph=toggle?.querySelector<SVGSVGElement>("svg:not(.v-morph)");
-  const glyphBox=glyph?.getBoundingClientRect();
-  // Both the snapshot hole and its live replacement must meet on physical
-  // pixels. Fractional edges antialias twice, leaving a light square seam.
-  const ratio=doc.defaultView?.devicePixelRatio||1;
-  const glyphTile=glyphBox?{
-    x:Math.floor(glyphBox.x*ratio)/ratio,
-    y:Math.floor(glyphBox.y*ratio)/ratio,
-    right:Math.ceil(glyphBox.right*ratio)/ratio,
-    bottom:Math.ceil(glyphBox.bottom*ratio)/ratio,
-  }:undefined;
-  const image=(svg:string)=>`url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
-  if(glyphTile){
-    const{x,y,right,bottom}=glyphTile,w=right-x,h=bottom-y;
-    canvas.style.setProperty("--v-theme-glyph-position",`${x}px ${y}px`);
-    canvas.style.setProperty("--v-theme-glyph-size",`${w}px ${h}px`);
-    canvas.style.setProperty("--v-theme-glyph-mask",image(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><path fill="white" fill-rule="evenodd" d="M0 0H${width}V${height}H0ZM${x} ${y}H${x+w}V${y+h}H${x}Z"/></svg>`));
-  }
-  const paintGlyph=()=>{
-    if(!glyph||!toggle||!glyphBox||!glyphTile)return;
-    const face=toggle.querySelector<SVGPathElement>("svg.v-morph [data-morph-body]");
-    const paint=face?getComputedStyle(face).fill:getComputedStyle(toggle).backgroundColor;
-    const alpha=paint.match(/(?:rgba\([^,]+,[^,]+,[^,]+,|\/)\s*([\d.]+)(%)?\s*\)/);
-    const opaque=paint!=="none"&&paint!=="transparent"&&(!alpha||Number(alpha[1])/(alpha[2]?100:1)>=.999)&&(!face||Number(getComputedStyle(face).opacity)>=.999);
-    // A transparent control may sit over a gradient or a separate SVG surface.
-    // Its tiny tile cannot reconstruct that backdrop. Keep the native snapshot
-    // there; only replace the glyph when its face supplies an exact opaque fill.
-    if(!opaque){
-      canvas.style.removeProperty("--v-theme-glyph");
-      canvas.style.removeProperty("--v-theme-glyph-mask");
-      return;
-    }
-    const{x,y,right,bottom}=glyphTile;
-    canvas.style.setProperty("--v-theme-glyph-mask",image(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><path fill="white" fill-rule="evenodd" d="M0 0H${width}V${height}H0ZM${x} ${y}H${right}V${bottom}H${x}Z"/></svg>`));
-    const copy=glyph.cloneNode(true) as SVGSVGElement;
-    copy.setAttribute("xmlns","http://www.w3.org/2000/svg");copy.style.color=getComputedStyle(glyph).color;
-    copy.setAttribute("width",String(glyphBox.width));copy.setAttribute("height",String(glyphBox.height));
-    const tile=doc.createElementNS("http://www.w3.org/2000/svg","svg");
-    tile.setAttribute("xmlns","http://www.w3.org/2000/svg");
-    tile.setAttribute("width",String(glyphTile.right-glyphTile.x));
-    tile.setAttribute("height",String(glyphTile.bottom-glyphTile.y));
-    copy.setAttribute("x",String(glyphBox.x-glyphTile.x));
-    copy.setAttribute("y",String(glyphBox.y-glyphTile.y));
-    const back=doc.createElementNS("http://www.w3.org/2000/svg","rect");back.setAttribute("width","100%");back.setAttribute("height","100%");
-    back.setAttribute("fill",paint);
-    tile.append(back,copy);canvas.style.setProperty("--v-theme-glyph",image(tile.outerHTML));
-  };
-  let unsubscribe=()=>{};
-  const media=doc.defaultView!.matchMedia("(prefers-reduced-motion: reduce)");
-  const interrupt=()=>reveal.finish();
-  const quietChanged=()=>{if(isQuiet())reveal.finish();};
-  const lane=createMotionLane(0,value=>{
-    if(reveal.done)return;
-    // The root clip is live in both engines. Repaint this tiny existing glyph
-    // from Motion's DOM values too, because WebKit freezes captured SVG content.
-    paintGlyph();
-    canvas.style.setProperty("--v-theme-clip",`path("${themeRevealPath(value,origin,width,height,phase)}${controlPath}")`);
-    canvas.setAttribute("data-theme-progress",String(Number(value.toFixed(4))));
-  });
-  const reveal:Reveal={scope,from,to:mode,requested:mode,ready:false,done:false,lane,view:null,
-    finish(){
-      if(reveal.done)return;
-      reveal.done=true;lane.dispose();scope.dataset.mode=reveal.requested;reveal.view?.skipTransition();
-      unsubscribe();media.removeEventListener("change",quietChanged);doc.removeEventListener("visibilitychange",quietChanged);
-      doc.removeEventListener("scroll",interrupt,true);doc.defaultView?.removeEventListener("resize",interrupt);
-      if(active===reveal){
-        for(const[name,value]of savedStyles){if(value)canvas.style.setProperty(name,value);else canvas.style.removeProperty(name);}
-        for(const[name,value]of savedAttributes){if(value===null)canvas.removeAttribute(name);else canvas.setAttribute(name,value);}
-        active=undefined;
-      }
-    },
-    run(){
-      const target=reveal.requested===reveal.to?1:0;
-      lane.to(target,{duration:duration/Math.max(.25,getSettingsSnapshot().flow.speed),ease:[.42,0,.18,1]},()=>reveal.finish());
-    },
-  };
-  active=reveal;canvas.setAttribute("data-theme-reveal",mode);canvas.setAttribute("data-theme-origin",`${origin.x} ${origin.y}`);lane.jump(0);
-  unsubscribe=subscribeSettings(quietChanged);media.addEventListener("change",quietChanged);doc.addEventListener("visibilitychange",quietChanged);
-  doc.addEventListener("scroll",interrupt,{capture:true,passive:true});doc.defaultView?.addEventListener("resize",interrupt,{passive:true});
+  const x=Math.max(0,Math.min(width,Number.isFinite(origin.x)?origin.x:width/2));
+  const y=Math.max(0,Math.min(height,Number.isFinite(origin.y)?origin.y:height/2));
+  const reach=Math.hypot(Math.max(x,width-x),Math.max(y,height-y));
+  canvas.setAttribute("data-theme-reveal",mode);
   try{
-    reveal.view=doc.startViewTransition(()=>{if(!reveal.done)scope.dataset.mode=reveal.to;});
-    void reveal.view.ready.then(()=>{if(!reveal.done){reveal.ready=true;if(isQuiet())reveal.finish();else reveal.run();}},()=>reveal.finish());
-    void reveal.view.finished.then(()=>reveal.finish(),()=>reveal.finish());
-  }catch{reveal.finish();}
+    const transition=start.call(doc,()=>{commit();});
+    void transition.ready.then(()=>{
+      try{
+        canvas.animate(
+          {clipPath:[`circle(0px at ${x}px ${y}px)`,`circle(${reach}px at ${x}px ${y}px)`]},
+          {duration:550,easing:"cubic-bezier(.32,.72,0,1)",pseudoElement:"::view-transition-new(root)"},
+        );
+      }catch{/* the theme commit itself still stands */}
+    },()=>{});
+    void transition.finished.then(
+      ()=>canvas.removeAttribute("data-theme-reveal"),
+      ()=>canvas.removeAttribute("data-theme-reveal"),
+    );
+  }catch{canvas.removeAttribute("data-theme-reveal");commit();}
 }

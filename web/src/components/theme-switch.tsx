@@ -23,8 +23,10 @@ export function ThemeSwitch() {
         try {
           localStorage.setItem(KEY, next)
         } catch { /* private mode */ }
+        // applyTheme commits data-mode AND the .dark class inside the
+        // view-transition callback — toggling the class here would leak the
+        // new theme into the old snapshot and kill the reveal.
         applyTheme(next)
-        document.documentElement.classList.toggle('dark', next === 'dark')
       }}
     />
   )
