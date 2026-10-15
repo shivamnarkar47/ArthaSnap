@@ -55,6 +55,21 @@ export function StockSearch({ initial, onGo }: { initial: string[]; onGo: (syms:
   const flip = (s: string) =>
     setPicks(picks.map((p) => (p === s ? (s.endsWith('.BO') ? s.replace(/\.BO$/, '.NS') : s.replace(/\.NS$/, '.BO')) : p)))
 
+  const submit = () => {
+    let syms = [...picks]
+    const t = text.trim()
+    if (t) {
+      try {
+        for (const s of parseSymbols(t)) if (!syms.includes(s)) syms.push(s)
+      } catch {
+        // typed text isn't raw tickers — take the highlighted suggestion instead
+        if (open && results[hi] && !syms.includes(results[hi].nse)) syms.push(results[hi].nse)
+      }
+    }
+    syms = syms.slice(0, 5)
+    if (syms.length) onGo(syms)
+  }
+
   return (
     <div>
       <div className="flex flex-wrap gap-2">
@@ -71,7 +86,13 @@ export function StockSearch({ initial, onGo }: { initial: string[]; onGo: (syms:
         ))}
       </div>
       <div ref={box} className="relative mt-3">
-        <div className="flex gap-2">
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            submit()
+          }}
+        >
           <Input
             value={text}
             onChange={(e) => setText(e.target.value.toUpperCase())}
@@ -83,28 +104,17 @@ export function StockSearch({ initial, onGo }: { initial: string[]; onGo: (syms:
               } else if (e.key === 'ArrowUp' && open) {
                 e.preventDefault()
                 setHi((h) => Math.max(h - 1, 0))
-              } else if (e.key === 'Enter') {
-                e.preventDefault()
-                if (open && results[hi]) add(results[hi].nse)
-                else if (text.trim()) {
-                  try {
-                    onGo(parseSymbols(text).join(',').split(','))
-                    return
-                  } catch {
-                    /* fall through */
-                  }
-                  if (picks.length) onGo(picks)
-                } else if (picks.length) onGo(picks)
               } else if (e.key === 'Escape') setOpen(false)
             }}
             placeholder={picks.length >= 5 ? 'Max 5 — remove one to add' : 'Type company — RELIANCE, HDFC, INFY…'}
             aria-label="Find Indian stocks"
+            enterKeyHint="search"
             disabled={picks.length >= 5 && !text}
           />
-          <Button type="button" onClick={() => onGo(picks)} disabled={!picks.length}>
+          <Button type="submit" disabled={!picks.length && !text.trim()}>
             Ask
           </Button>
-        </div>
+        </form>
         {open && results.length > 0 && (
           <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-border bg-popover shadow-lg" role="listbox">
             {results.map((r, i) => (

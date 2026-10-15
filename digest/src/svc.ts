@@ -27,8 +27,9 @@ export class HttpErr extends Error {
 
 // ---- validation (trust boundary) ----
 export const SYM_RE = /^[A-Z0-9.&-]{1,20}$/;
-export const RANGES = ["5d", "1mo", "3mo", "6mo", "1y"];
-export const INTERVALS = ["1d", "1wk"];
+export const RANGES = ["1d", "5d", "1mo", "3mo", "6mo", "1y"];
+export const INTERVALS = ["5m", "15m", "1h", "1d", "1wk"];
+const RANGE_INTERVAL: Record<string, string> = { "1d": "15m", "5d": "1h" };
 export const cleanSym = (s: string) => {
   const v = s.trim().toUpperCase();
   if (!SYM_RE.test(v)) throw new HttpErr(400, `bad symbol: ${s}`);
@@ -58,7 +59,7 @@ async function get(url: string, timeoutMs = 15000) {
 
 // ---- history (Yahoo v8, no auth needed) ----
 export type Candle = { t: number; o: number; h: number; l: number; c: number; v: number };
-export async function chart(sym: string, range = "1mo", interval = "1d") {
+export async function chart(sym: string, range = "1mo", interval: string = RANGE_INTERVAL[range] ?? "1d") {
   if (!RANGES.includes(range) || !INTERVALS.includes(interval)) throw new HttpErr(400, "bad range/interval");
   const key = `chart:${sym}:${range}:${interval}`;
   const hit = cc.get(key);
@@ -72,7 +73,7 @@ export async function chart(sym: string, range = "1mo", interval = "1d") {
     t, o: q.open[i], h: q.high[i], l: q.low[i], c: q.close[i], v: q.volume[i],
   })).filter((c: Candle) => c.c != null).slice(-90);
   const out = { candles, meta: res.meta };
-  cc.set(key, out, 1800);
+  cc.set(key, out, range === "1d" ? 120 : 1800);
   return out;
 }
 

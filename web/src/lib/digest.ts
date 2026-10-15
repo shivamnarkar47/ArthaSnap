@@ -3,10 +3,11 @@
 import { createServerFn } from '@tanstack/react-start'
 import {
   snapshot, chart, digest, movers, suggest,
-  parseSymbols as parse, type SuggestRow,
+  parseSymbols as parse, RANGES, type SuggestRow,
 } from '../../../digest/src/svc'
 
-export { parseSymbols, type SuggestRow } from '../../../digest/src/svc'
+export { parseSymbols, RANGES, type SuggestRow } from '../../../digest/src/svc'
+export type { Candle } from '../../../digest/src/svc'
 
 export interface Quote {
   symbol: string
@@ -43,6 +44,17 @@ export interface Movers {
   gainers: Array<{ symbol: string; price: number; chgPct: number }>
   losers: Array<{ symbol: string; price: number; chgPct: number }>
 }
+
+// Chart path: full OHLC candles for a range (1d intraday → 1mo daily).
+export const getChart = createServerFn({ method: 'GET' })
+  .validator((d: unknown) => {
+    const o = (d ?? {}) as { symbol?: unknown; range?: unknown }
+    const symbol = parse(String(o.symbol ?? ''))[0] as string
+    const range = String(o.range ?? '1mo')
+    if (!RANGES.includes(range)) throw new Error(`bad range: ${range}`)
+    return { symbol, range }
+  })
+  .handler(async ({ data }) => chart(data.symbol, data.range))
 
 // Fast path (SSR): day's top-10 gainers/losers.
 export const getMovers = createServerFn({ method: 'GET' }).handler(

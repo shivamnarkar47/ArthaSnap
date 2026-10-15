@@ -14,7 +14,8 @@ app.get("/stock", async (c) => {
 app.get("/history", async (c) => {
   try {
     const sym = cleanSym(c.req.query("symbol") || "");
-    const { candles } = await chart(sym, c.req.query("range") || "1mo", c.req.query("interval") || "1d");
+    const range = c.req.query("range") || "1mo";
+    const { candles } = await chart(sym, range, c.req.query("interval") || undefined);
     return c.json({ status: "success", symbol: sym, count: candles.length, candles });
   } catch (e) { return err(e); }
 });

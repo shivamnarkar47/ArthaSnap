@@ -5,7 +5,7 @@ import { getQuotes, getDigest, getMovers, parseSymbols, type DigestResult } from
 import { Button } from '#/components/ui/button'
 import { StockSearch } from '#/components/stock-search'
 import { Card, CardHeader, CardTitle, CardContent } from '#/components/ui/card'
-import { LineChart } from '#/components/ui/line-chart'
+import { SymbolChart } from '#/components/symbol-chart'
 
 function validSearch(search: Record<string, unknown>): { symbols: string } {
   const raw = String(search.symbols ?? '').trim()
@@ -27,7 +27,6 @@ export const Route = createFileRoute('/')({
   component: Home,
 })
 
-const dayLabel = (t: number) => new Date(t * 1000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 const short = (s: string) => s.replace(/\.NS$/, '')
 const inr = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 1 })}`
 
@@ -231,14 +230,7 @@ function Home() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <LineChart
-                    variant="smooth"
-                    appearance="analysis"
-                    data={q.spark.map((p) => ({ label: dayLabel(p.t), price: Number(p.c.toFixed(1)) }))}
-                    series={[{ key: 'price', label: short(q.symbol), color: 'blue' }]}
-                    caption={`${short(q.symbol)} · last 20 closes`}
-                    description=""
-                  />
+                  <SymbolChart symbol={q.symbol} initial={q.spark} />
                   {d ? (
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <Verdict action={d.decision.action} />
