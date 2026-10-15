@@ -33,7 +33,7 @@ const inr = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigi
 
 function Kicker({ n, children }: { n: string; children: React.ReactNode }) {
   return (
-    <p className="island-kicker">
+    <p className="island-kicker min-w-0 break-words [overflow-wrap:anywhere]">
       {n} · {children}
     </p>
   )
@@ -59,18 +59,18 @@ function Skeleton({ label }: { label: string }) {  return (
 
 function Md({ text }: { text: string }) {
   return (
-    <div className="text-sm leading-6">
+    <div className="min-w-0 break-words text-sm leading-6 [overflow-wrap:anywhere]">
       <Markdown
         components={{
           h1: (p) => <h3 className="mb-2 text-base font-bold" {...p} />,
           h2: (p) => <h4 className="mb-1 mt-4 text-sm font-bold uppercase tracking-wide text-muted-foreground" {...p} />,
           h3: (p) => <h4 className="mb-1 mt-3 text-sm font-bold" {...p} />,
-          p: (p) => <p className="mb-2" {...p} />,
+          p: (p) => <p className="mb-2 break-words [overflow-wrap:anywhere]" {...p} />,
           ul: (p) => <ul className="mb-3 ml-4 list-disc space-y-1" {...p} />,
           ol: (p) => <ol className="mb-3 ml-4 list-decimal space-y-1" {...p} />,
-          li: (p) => <li className="pl-1" {...p} />,
+          li: (p) => <li className="pl-1 break-words [overflow-wrap:anywhere]" {...p} />,
           strong: (p) => <strong className="font-semibold text-foreground" {...p} />,
-          a: (p) => <a className="underline underline-offset-2" target="_blank" rel="noreferrer" {...p} />,
+          a: (p) => <a className="underline underline-offset-2 [overflow-wrap:anywhere]" target="_blank" rel="noreferrer" {...p} />,
           hr: () => <hr className="my-3 border-border" />,
         }}
       >
@@ -211,20 +211,20 @@ function Home() {
 
       {/* 02 — digest, only when symbols picked */}
       {hasSyms && (
-      <section className="mt-10">
-        <Kicker n="02">DIGEST · {symbols}</Kicker>
-        <div className="mt-3 grid gap-4 md:grid-cols-2">
+      <section className="mt-10 min-w-0">
+        <Kicker n="02">DIGEST · {symbols.split(',').join(', ')}</Kicker>
+        <div className="mt-3 grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
           {quotes.map((q) => {
             const d = verdict(q.symbol)
             return (
-              <Card key={q.symbol}>
-                <CardHeader>
-                  <CardTitle className="flex items-baseline justify-between gap-3">
-                    <span className="truncate">{short(q.symbol)}</span>
-                    <span className="text-2xl font-bold tabular-nums">{q.snapshot.price != null ? inr(q.snapshot.price) : '—'}</span>
+              <Card key={q.symbol} className="min-w-0 overflow-hidden">
+                <CardHeader className="min-w-0 flex-col items-stretch gap-1">
+                  <CardTitle className="flex min-w-0 items-baseline justify-between gap-3">
+                    <span className="min-w-0 flex-1 truncate">{short(q.symbol)}</span>
+                    <span className="shrink-0 text-2xl font-bold tabular-nums">{q.snapshot.price != null ? inr(q.snapshot.price) : '—'}</span>
                   </CardTitle>
-                  <div className="flex flex-col gap-0.5 pt-1 text-sm text-muted-foreground">
-                    <span className="truncate">{q.snapshot.sector ?? '—'} · PE {q.snapshot.pe != null ? Number(q.snapshot.pe).toFixed(1) : '—'}</span>
+                  <div className="flex min-w-0 flex-col gap-0.5 pt-1 text-sm text-muted-foreground">
+                    <span className="block truncate">{q.snapshot.sector ?? '—'} · PE {q.snapshot.pe != null ? Number(q.snapshot.pe).toFixed(1) : '—'}</span>
                     <span className={`font-semibold tabular-nums ${q.snapshot.chgPct != null && q.snapshot.chgPct >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                       {q.snapshot.chgPct != null ? `${q.snapshot.chgPct > 0 ? '+' : ''}${Number(q.snapshot.chgPct).toFixed(2)}%` : '—'}
                     </span>
@@ -250,10 +250,10 @@ function Home() {
                     <Skeleton label={aiError ?? 'Judging'} />
                   )}
                   {d && d.news.length > 0 && (
-                    <ul className="space-y-1 border-t border-border pt-3 text-sm text-muted-foreground">
+                    <ul className="min-w-0 space-y-1.5 border-t border-border pt-3 text-sm text-muted-foreground">
                       {d.news.slice(0, 3).map((n) => (
-                        <li key={n.link} className="truncate">
-                          <a href={n.link} target="_blank" rel="noreferrer" className="hover:underline">{n.title}</a>
+                        <li key={n.link} className="min-w-0">
+                          <a href={n.link} target="_blank" rel="noreferrer" className="block break-words leading-snug line-clamp-2 hover:underline">{n.title}</a>
                         </li>
                       ))}
                     </ul>
@@ -268,9 +268,9 @@ function Home() {
 
       {/* 03 — brief */}
       {hasSyms && (
-      <section className="mt-6">
+      <section className="mt-6 min-w-0">
         <Kicker n="03">AI BRIEF</Kicker>
-        <Card className="mt-3">
+        <Card className="mt-3 min-w-0 overflow-hidden">
           <CardContent className="pt-6">
             {digest ? <Md text={digest.summary} /> : <Skeleton label={aiError ?? 'Summarizing'} />}
           </CardContent>
