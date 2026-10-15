@@ -26,7 +26,7 @@ export class HttpErr extends Error {
 }
 
 // ---- validation (trust boundary) ----
-export const SYM_RE = /^[A-Z0-9.]{1,20}$/;
+export const SYM_RE = /^[A-Z0-9.&-]{1,20}$/;
 export const RANGES = ["5d", "1mo", "3mo", "6mo", "1y"];
 export const INTERVALS = ["1d", "1wk"];
 export const cleanSym = (s: string) => {
