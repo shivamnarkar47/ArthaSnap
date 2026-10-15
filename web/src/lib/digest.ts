@@ -45,16 +45,17 @@ export interface Movers {
   losers: Array<{ symbol: string; price: number; chgPct: number }>
 }
 
-// Chart path: full OHLC candles for a range (1d intraday → 1mo daily).
+// Chart path: full OHLC candles for a range (5h intraday → max history).
 export const getChart = createServerFn({ method: 'GET' })
   .validator((d: unknown) => {
-    const o = (d ?? {}) as { symbol?: unknown; range?: unknown }
+    const o = (d ?? {}) as { symbol?: unknown; range?: unknown; interval?: unknown }
     const symbol = parse(String(o.symbol ?? ''))[0] as string
     const range = String(o.range ?? '1mo')
     if (!RANGES.includes(range)) throw new Error(`bad range: ${range}`)
-    return { symbol, range }
+    const interval = o.interval == null || o.interval === '' ? undefined : String(o.interval)
+    return { symbol, range, interval }
   })
-  .handler(async ({ data }) => chart(data.symbol, data.range))
+  .handler(async ({ data }) => chart(data.symbol, data.range, data.interval))
 
 // Full single-stock analysis for the detail route: snapshot + technicals +
 // SubQ decision + news + 3mo candles + AI summary.

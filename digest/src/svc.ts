@@ -27,9 +27,9 @@ export class HttpErr extends Error {
 
 // ---- validation (trust boundary) ----
 export const SYM_RE = /^[A-Z0-9.&-]{1,20}$/;
-export const RANGES = ["1d", "5d", "1mo", "3mo", "6mo", "1y"];
-export const INTERVALS = ["5m", "15m", "1h", "1d", "1wk"];
-const RANGE_INTERVAL: Record<string, string> = { "1d": "15m", "5d": "1h" };
+export const RANGES = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "5y", "max"];
+export const INTERVALS = ["1m", "5m", "15m", "1h", "1d", "1wk", "1mo"];
+const RANGE_INTERVAL: Record<string, string> = { "1d": "15m", "5d": "1h", "5y": "1wk", "max": "1mo" };
 export const cleanSym = (s: string) => {
   const v = s.trim().toUpperCase();
   if (!SYM_RE.test(v)) throw new HttpErr(400, `bad symbol: ${s}`);
@@ -71,7 +71,7 @@ export async function chart(sym: string, range = "1mo", interval: string = RANGE
   const q = res.indicators.quote[0];
   const candles: Candle[] = res.timestamp.map((t: number, i: number) => ({
     t, o: q.open[i], h: q.high[i], l: q.low[i], c: q.close[i], v: q.volume[i],
-  })).filter((c: Candle) => c.c != null).slice(-90);
+  })).filter((c: Candle) => c.c != null).slice(-500);
   const out = { candles, meta: res.meta };
   cc.set(key, out, range === "1d" ? 120 : 1800);
   return out;

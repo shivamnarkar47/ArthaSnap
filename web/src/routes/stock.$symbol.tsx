@@ -4,7 +4,7 @@ import { getStockDetail, type StockDetail } from '#/lib/digest'
 import { Button } from '#/components/ui/button'
 import { Md } from '#/components/md'
 import { Card, CardContent } from '#/components/ui/card'
-import { SymbolChart } from '#/components/symbol-chart'
+import { SymbolChart, FULL_RANGES } from '#/components/symbol-chart'
 
 export const Route = createFileRoute('/stock/$symbol')({
   head: ({ params }) => ({
@@ -167,6 +167,7 @@ function StockPage() {
                 <SymbolChart
                   symbol={detail.symbol}
                   initial={detail.candles.slice(-20).map((c) => ({ t: c.t, c: c.c }))}
+                  ranges={FULL_RANGES}
                 />
               </CardContent>
             </Card>

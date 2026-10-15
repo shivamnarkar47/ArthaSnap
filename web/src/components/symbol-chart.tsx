@@ -5,14 +5,29 @@ import { LineChart } from "#/components/ui/line-chart.tsx";
 import { CandleChart } from "#/components/ui/candle-chart.tsx";
 import { Button } from "#/components/ui/button.tsx";
 
-type ChartRange = "1D" | "1W" | "1M";
+export type ChartRange = "5H" | "1D" | "1W" | "1M" | "5Y" | "ALL";
 type ChartKind = "line" | "candle";
-const RANGE_Q = { "1D": "1d", "1W": "5d", "1M": "1mo" } as const;
-const RANGE_CAPTION = { "1D": "today", "1W": "last 5 days", "1M": "last 20 closes" } as const;
+
+const RANGE_CFG: Record<
+  ChartRange,
+  { q: string; interval?: string; slice?: number; caption: string; intraday?: boolean; month?: boolean }
+> = {
+  "5H": { q: "1d", interval: "5m", slice: 60, caption: "last 5 hours", intraday: true },
+  "1D": { q: "1d", interval: "15m", caption: "today", intraday: true },
+  "1W": { q: "5d", interval: "1h", caption: "last 5 days" },
+  "1M": { q: "1mo", caption: "last 20 closes" },
+  "5Y": { q: "5y", caption: "last 5 years", month: true },
+  "ALL": { q: "max", caption: "since listing", month: true },
+};
+
+export const CARD_RANGES: ChartRange[] = ["1D", "1W", "1M"];
+export const FULL_RANGES: ChartRange[] = ["5H", "1D", "1W", "1M", "5Y", "ALL"];
 
 const short = (s: string) => s.replace(/\.NS$/, "");
 const dayLabel = (t: number) =>
   new Date(t * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+const monthLabel = (t: number) =>
+  new Date(t * 1000).toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
 const timeLabel = (t: number) =>
   new Date(t * 1000).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true });
 
@@ -40,12 +55,16 @@ function downsample(candles: Candle[], max = 60): Candle[] {
 export function SymbolChart({
   symbol,
   initial,
+  ranges = CARD_RANGES,
 }: {
   symbol: string;
   initial: Array<{ t: number; c: number }>;
+  ranges?: ChartRange[];
 }) {
   const [kind, setKind] = React.useState<ChartKind>("line");
-  const [range, setRange] = React.useState<ChartRange>("1M");
+  const [range, setRange] = React.useState<ChartRange>(() =>
+    ranges.includes("1M") ? "1M" : ranges[0],
+  );
   const [ohlc, setOhlc] = React.useState<Record<string, Candle[]>>({});
   const [failed, setFailed] = React.useState<Record<string, boolean>>({});
   const [fetching, setFetching] = React.useState(false);
@@ -53,17 +72,20 @@ export function SymbolChart({
   React.useEffect(() => {
     setOhlc({});
     setFailed({});
+    setRange(ranges.includes("1M") ? "1M" : ranges[0]);
   }, [symbol]);
 
+  const cfg = RANGE_CFG[range];
   const needFetch = !(range === "1M" && kind === "line");
   React.useEffect(() => {
     if (!needFetch || ohlc[range] || failed[range]) return;
     let live = true;
     setFetching(true);
-    getChart({ data: { symbol, range: RANGE_Q[range] } }).then(
+    getChart({ data: { symbol, range: cfg.q, interval: cfg.interval } }).then(
       (r) => {
         if (!live) return;
-        setOhlc((m) => ({ ...m, [range]: downsample(r.candles) }));
+        const sliced = cfg.slice ? r.candles.slice(-cfg.slice) : r.candles;
+        setOhlc((m) => ({ ...m, [range]: downsample(sliced) }));
         setFetching(false);
       },
       () => {
@@ -75,9 +97,9 @@ export function SymbolChart({
     return () => {
       live = false;
     };
-  }, [symbol, range, kind, needFetch, ohlc, failed]);
+  }, [symbol, range, kind, needFetch, ohlc, failed, cfg]);
 
-  const label = range === "1D" ? timeLabel : dayLabel;
+  const label = cfg.intraday ? timeLabel : cfg.month ? monthLabel : dayLabel;
   const candles = ohlc[range];
   const showLoading = needFetch && !candles && !failed[range];
 
@@ -94,8 +116,8 @@ export function SymbolChart({
   return (
     <div className="min-w-0 space-y-3">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-1" role="group" aria-label="Chart range">
-          {(Object.keys(RANGE_Q) as ChartRange[]).map((r) => (
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Chart range">
+          {ranges.map((r) => (
             <Button
               key={r}
               type="button"
@@ -143,7 +165,7 @@ export function SymbolChart({
           appearance="analysis"
           data={initial.map((p) => ({ label: dayLabel(p.t), price: Number(p.c.toFixed(1)) }))}
           series={[{ key: "price", label: short(symbol), color: "blue" }]}
-          caption={`${short(symbol)} · ${RANGE_CAPTION[range]}`}
+          caption={`${short(symbol)} · ${cfg.caption}`}
           description=""
         />
       ) : kind === "line" ? (
@@ -152,14 +174,14 @@ export function SymbolChart({
           appearance="analysis"
           data={(candles ?? []).map((p) => ({ label: label(p.t), price: Number(p.c.toFixed(1)) }))}
           series={[{ key: "price", label: short(symbol), color: "blue" }]}
-          caption={`${short(symbol)} · ${RANGE_CAPTION[range]}`}
+          caption={`${short(symbol)} · ${cfg.caption}`}
           description=""
         />
       ) : (
         <CandleChart
           appearance="analysis"
           data={(candles ?? []).map((p) => ({ label: label(p.t), o: p.o, h: p.h, l: p.l, c: p.c }))}
-          caption={`${short(symbol)} · ${RANGE_CAPTION[range]}`}
+          caption={`${short(symbol)} · ${cfg.caption}`}
           description=""
           valueFormatter={inrTick}
         />
